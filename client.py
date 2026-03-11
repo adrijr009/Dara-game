@@ -20,15 +20,22 @@ class DaraClient:
         """Cria a tela inicial de conexão."""
         self.lobby_frame = tk.Frame(self.root, padx=20, pady=20)
         self.lobby_frame.pack()
-        tk.Label(self.lobby_frame, text="Dara Multi-Máquinas", font=('Arial', 14, 'bold')).pack(pady=10)
+        tk.Label(self.lobby_frame, text="Dara", font=('Arial', 14, 'bold')).pack(pady=10)
+
+        tk.Label(self.lobby_frame, text="Digite o IP do Servidor:").pack()
+        self.ent_ip = tk.Entry(self.lobby_frame)
+        self.ent_ip.insert(0, "127.0.0.1") # Valor padrão
+        self.ent_ip.pack(pady=5)
+
         self.btn_connect = tk.Button(self.lobby_frame, text="Conectar ao Servidor", command=self.connect)
         self.btn_connect.pack()
 
     def connect(self):
         """Tenta conectar ao IP do servidor e inicia a escuta de mensagens."""
+        ip_digitado = self.ent_ip.get()
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect(('127.0.0.1', 5000)) 
+            self.socket.connect((ip_digitado, 5000)) 
             # Thread: permite que o jogo receba dados do servidor sem travar a janela
             threading.Thread(target=self.listen, daemon=True).start()
             self.btn_connect.config(text="Aguardando oponente...", state="disabled")

@@ -5,7 +5,7 @@ import time
 import random
 
 class DaraServer:
-    def __init__(self, host='127.0.0.1', port=5000):
+    def __init__(self, host='0.0.0.0', port=5000):
         # Inicializa o socket TCP/IP. AF_INET é para IPv4 e SOCK_STREAM para TCP.
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind((host, port))
