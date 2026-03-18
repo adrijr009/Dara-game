@@ -30,18 +30,6 @@ class DaraServer:
                 # Se um cliente caiu, removemos da lista para evitar erros de envio
                 self.clients.remove(client)
 
-    def count_max_sequence(self, line, p_id):
-        """Varre uma lista (linha ou coluna) para encontrar a maior sequência de peças idênticas."""
-        max_count = 0
-        current_count = 0
-        for val in line:
-            if val == p_id:
-                current_count += 1
-                max_count = max(max_count, current_count)
-            else:
-                current_count = 0
-        return max_count
-
     def get_sequence_at(self, line, index, p_id):
         """
         Lógica Fundamental: Conta peças seguidas partindo obrigatoriamente do 'index' atual.
