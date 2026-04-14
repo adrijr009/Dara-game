@@ -2,189 +2,175 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 import socket, threading, json
 
+class SocketHandler:
+    def __init__(self, callback):
+        self.socket = None
+        self.callback = callback
+
+    def connect(self, ip):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((ip, 5000))
+        threading.Thread(target=self._listen, daemon=True).start()
+
+    def _listen(self):
+        while True:
+            try:
+                data = json.loads(self.socket.recv(4096).decode('utf-8'))
+                self.callback(data)
+            except: break
+
+    def send(self, data):
+        if self.socket: self.socket.send(json.dumps(data).encode('utf-8'))
+
 class DaraClient:
     def __init__(self, root):
         self.root = root
         self.root.title("Dara Game")
-        
-        # Variáveis de controle de rede e estado
-        self.socket = None
-        self.player_id = None    # Definido pelo servidor (1 ou 2)
-        self.my_turn = False     # Bloqueia cliques se não for sua vez
-        self.phase = "PLACEMENT" # PLACEMENT, MOVEMENT ou CAPTURE
-        self.selected_piece = None # Armazena a peça que você quer mover
-        
+        self.network = SocketHandler(self.process_data)
+        self.player_id = None
+        self.my_turn = False
+        self.phase = "PLACEMENT"
+        self.selected_piece = None
+        self.btns = [[None for _ in range(6)] for _ in range(5)]
         self.setup_lobby()
 
     def setup_lobby(self):
-        """Cria a tela inicial de conexão."""
         self.lobby_frame = tk.Frame(self.root, padx=20, pady=20)
         self.lobby_frame.pack()
-        tk.Label(self.lobby_frame, text="Dara", font=('Arial', 14, 'bold')).pack(pady=10)
-
-        tk.Label(self.lobby_frame, text="Digite o IP do Servidor:").pack()
+        tk.Label(self.lobby_frame, text="Dara - Redes", font=('Arial', 14, 'bold')).pack(pady=10)
+        tk.Label(self.lobby_frame, text="IP do Servidor:").pack()
         self.ent_ip = tk.Entry(self.lobby_frame)
-        self.ent_ip.insert(0, "127.0.0.1") # Valor padrão
+        self.ent_ip.insert(0, "127.0.0.1")
         self.ent_ip.pack(pady=5)
-
-        self.btn_connect = tk.Button(self.lobby_frame, text="Conectar ao Servidor", command=self.connect)
-        self.btn_connect.pack()
+        self.btn_conn = tk.Button(self.lobby_frame, text="Conectar", command=self.connect)
+        self.btn_conn.pack()
 
     def connect(self):
-        """Tenta conectar ao IP do servidor e inicia a escuta de mensagens."""
-        ip_digitado = self.ent_ip.get()
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((ip_digitado, 5000)) 
-            # Thread: permite que o jogo receba dados do servidor sem travar a janela
-            threading.Thread(target=self.listen, daemon=True).start()
-            self.btn_connect.config(text="Aguardando oponente...", state="disabled")
-        except:
-            messagebox.showerror("Erro", "Servidor offline!")
+            self.network.connect(self.ent_ip.get())
+            self.btn_conn.config(text="Aguardando Oponente...", state="disabled")
+        except: messagebox.showerror("Erro", "Servidor offline!")
 
     def setup_game_ui(self):
-        """Monta a interface do tabuleiro e do chat após a conexão."""
         self.lobby_frame.destroy()
         self.main_frame = tk.Frame(self.root)
         self.main_frame.pack(padx=10, pady=10)
-
-        # Labels de informação
-        tk.Label(self.main_frame, text=f"Você é o Jogador {self.player_id}", font=('Arial', 10, 'italic')).grid(row=0, column=0, sticky="w")
-        self.lbl_status = tk.Label(self.main_frame, text="Sorteando quem inicia...", font=('Arial', 11, 'bold'))
-        self.lbl_status.grid(row=1, column=0, columnspan=2, pady=5)
-
-        # Criação do Tabuleiro 5x6 usando Canvas (para desenhar peças redondas)
-        self.board_frame = tk.Frame(self.main_frame, bg="grey")
-        self.board_frame.grid(row=2, column=0)
         
-        self.btns = [[None for _ in range(6)] for _ in range(5)]
+        # Cabeçalho: ID do jogador e botão desistir
+        header = tk.Frame(self.main_frame)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew")
+        
+        tk.Label(header, text=f"Você é o JOGADOR {self.player_id}", fg="blue" if self.player_id==1 else "red", font=('Arial', 10, 'bold')).pack(side="left")
+        
+        tk.Button(header, text="Desistir", bg="#ff7675", command=self.confirm_give_up).pack(side="right")
+        
+        self.lbl_status = tk.Label(self.main_frame, text="Iniciando...", font=('Arial', 11))
+        self.lbl_status.grid(row=1, column=0, columnspan=2, pady=10)
+        
+        board_container = tk.Frame(self.main_frame, bg="#2f3640", padx=2, pady=2)
+        board_container.grid(row=2, column=0)
+        
         for r in range(5):
             for c in range(6):
-                canv = tk.Canvas(self.board_frame, width=60, height=60, bg="#dcdde1", highlightthickness=1, relief="raised")
+                canv = tk.Canvas(board_container, width=60, height=60, bg="#dcdde1", highlightthickness=1)
                 canv.grid(row=r, column=c, padx=1, pady=1)
-                # O clique envia a coordenada (r, c) para a função on_click
-                canv.bind("<Button-1>", lambda event, r=r, c=c: self.on_click(r, c))
+                canv.bind("<Button-1>", lambda e, r=r, c=c: self.on_click(r, c))
                 self.btns[r][c] = canv
 
-        self.btn_give_up = tk.Button(self.main_frame, text="Desistir", fg="white", bg="#c0392b", command=self.confirm_give_up)
-        self.btn_give_up.grid(row=0, column=1, sticky="e", padx=5)
-
-        self.setup_chat()
-
-    def on_click(self, r, c):
-        """Envia para o servidor a intenção de jogada dependendo da fase atual."""
-        if self.my_turn:
-            # Fase 1: Apenas posicionar
-            if self.phase == "PLACEMENT":
-                self.send({"type": "place", "pos": (r, c)})
-            
-            # Fase 2: Selecionar peça (clique 1) e mover (clique 2)
-            elif self.phase == "MOVEMENT":
-                if self.selected_piece:
-                    self.send({"type": "move", "old_pos": self.selected_piece, "pos": (r, c)})
-                    self.selected_piece = None
-                    # Limpa destaques amarelos
-                    for row in self.btns:
-                        for canv in row: canv.config(highlightbackground="black", highlightthickness=1)
-                else:
-                    self.selected_piece = (r, c)
-                    # Destaca a peça escolhida
-                    self.btns[r][c].config(highlightbackground="yellow", highlightthickness=3)
-            
-            # Fase 3: Escolher peça do inimigo para remover
-            elif self.phase == "CAPTURE":
-                self.send({"type": "capture", "pos": (r, c)})
-
-    def update_board(self, data):
-        """Recebe o estado do tabuleiro do servidor e redesenha tudo."""
-        self.phase = data['phase']
-        turn = data['turn']
-        self.my_turn = (turn == self.player_id)
-        
-        fases_pt = {"PLACEMENT": "Colocação", "MOVEMENT": "Movimentação", "CAPTURE": "CAPTURA!"}
-        
-        # Lógica visual de cores para o status
-        if self.my_turn:
-            status_text = "SUA VEZ"
-            cor = "green" if self.phase != "CAPTURE" else "red"
-        else:
-            status_text = f"Vez do Jogador {turn}"
-            cor = "black"
-            
-        self.lbl_status.config(text=f"{status_text} | Fase: {fases_pt[self.phase]}", fg=cor)
-
-        piece_colors = {1: "#3498db", 2: "#e74c3c"} # 1=Azul, 2=Vermelho
-        
-        # Varre a matriz recebida e desenha os círculos no Canvas
-        for r in range(5):
-            for c in range(6):
-                val = data['board'][r][c]
-                canv = self.btns[r][c]
-                canv.delete("piece") # Remove desenho antigo
-                
-                if val != 0:
-                    padding = 10
-                    canv.create_oval(padding, padding, 60-padding, 60-padding, 
-                                     fill=piece_colors[val], outline="white", width=2, tags="piece")
-
-    def update_chat(self, msg):
-        """Adiciona mensagens ao campo de chat."""
-        self.chat_area.config(state='normal')
-        self.chat_area.insert(tk.END, msg + "\n")
-        if "SISTEMA:" in msg: # Mensagens automáticas ficam em roxo
-            self.chat_area.tag_add("sys", "end-2l", "end-1l")
-            self.chat_area.tag_config("sys", foreground="purple", font=('Arial', 9, 'bold'))
-        self.chat_area.config(state='disabled')
-        self.chat_area.see(tk.END)
-
-    def setup_chat(self):
-        """Interface lateral do chat."""
+        # Chat
         chat_frame = tk.Frame(self.main_frame)
         chat_frame.grid(row=2, column=1, padx=10)
         self.chat_area = scrolledtext.ScrolledText(chat_frame, width=30, height=18, state='disabled', font=('Arial', 9))
         self.chat_area.pack()
-        self.chat_entry = tk.Entry(chat_frame)
-        self.chat_entry.pack(fill='x', pady=5)
-        self.chat_entry.bind("<Return>", self.send_chat)
+        self.chat_ent = tk.Entry(chat_frame)
+        self.chat_ent.pack(fill='x', pady=5)
+        self.chat_ent.bind("<Return>", self.send_chat)
 
-    def send(self, data):
-        """Converte dicionário em JSON e envia via Socket."""
-        self.socket.send(json.dumps(data).encode('utf-8'))
+    def process_data(self, data):
+        t = data['type']
+        if t == 'init': self.player_id = data['player_id']
+        elif t == 'start': self.root.after(0, self.setup_game_ui)
+        elif t == 'update': self.root.after(0, self.draw_board, data)
+        elif t == 'chat': self.root.after(0, self.add_chat, data)
+        elif t == 'win': 
+            messagebox.showinfo("Fim de Jogo", f"O Jogador {data['winner']} venceu!")
+            self.root.quit()
 
-    def send_chat(self, event):
-        """Envia a mensagem digitada para o servidor."""
-        msg = self.chat_entry.get()
-        if msg:
-            self.send({"type": "chat", "user": f"Jogador {self.player_id}", "text": msg})
-            self.chat_entry.delete(0, tk.END)
+    def on_click(self, r, c):
+        if not self.my_turn: return
+        
+        if self.phase == "PLACEMENT":
+            self.network.send({"type": "place", "pos": (r, c)})
+        
+        elif self.phase == "MOVEMENT":
+            # Lógica de seleção e DESELEÇÃO
+            if self.selected_piece == (r, c):
+                self.selected_piece = None # Clicou na mesma, desmarca
+                self.refresh_visuals()
+            elif self.selected_piece:
+                self.network.send({"type": "move", "old_pos": self.selected_piece, "pos": (r, c)})
+                self.selected_piece = None
+            else:
+                self.selected_piece = (r, c)
+                self.refresh_visuals()
+        
+        elif self.phase == "CAPTURE":
+            self.network.send({"type": "capture", "pos": (r, c)})
 
-    def listen(self):
-        """Fica ouvindo o servidor continuamente (roda em background)."""
-        while True:
-            try:
-                raw_data = self.socket.recv(4096).decode('utf-8')
-                if not raw_data: break
-                data = json.loads(raw_data)
+    def draw_board(self, data):
+        self.phase = data['phase']
+        self.my_turn = (data['turn'] == self.player_id)
+        
+        # Indicativo de fases com cores
+        fase_pt = {"PLACEMENT": "Colocação", "MOVEMENT": "Movimentação", "CAPTURE": "CAPTURA!"}
+        cor_fase = "red" if self.phase == "CAPTURE" else "black"
+        peso_fase = "bold" if self.phase == "CAPTURE" else "normal"
+        
+        status_text = "SUA VEZ" if self.my_turn else f"Vez do Jogador {data['turn']}"
+        self.lbl_status.config(text=f"{status_text} | Fase: {fase_pt[self.phase]}", fg=cor_fase, font=('Arial', 11, peso_fase))
+        
+        self.current_board_data = data['board'] # Salva para refrescar destaques
+        self.refresh_visuals()
+
+    def refresh_visuals(self):
+        """Atualiza o Canvas com base no estado e na seleção atual"""
+        if not hasattr(self, 'current_board_data'): return
+        colors = {1: "#3498db", 2: "#e74c3c"}
+        
+        for r in range(5):
+            for c in range(6):
+                val = self.current_board_data[r][c]
+                canv = self.btns[r][c]
+                canv.delete("piece")
                 
-                # O servidor manda o comando e o cliente obedece
-                if data['type'] == 'init': 
-                    self.player_id = data['player_id']
-                elif data['type'] == 'start': 
-                    self.root.after(0, self.setup_game_ui)
-                elif data['type'] == 'update': 
-                    self.root.after(0, self.update_board, data)
-                elif data['type'] == 'chat': 
-                    self.root.after(0, self.update_chat, f"{data['user']}: {data['text']}")
-                elif data['type'] == 'win':
-                    messagebox.showinfo("Fim de Jogo", f"Jogador {data['winner']} venceu!")
-                    self.root.quit()
-            except: break
+                # Borda de seleção
+                if self.selected_piece == (r, c):
+                    canv.config(highlightbackground="yellow", highlightthickness=3)
+                else:
+                    canv.config(highlightbackground="black", highlightthickness=1)
+                
+                if val != 0:
+                    canv.create_oval(10, 10, 50, 50, fill=colors[val], outline="white", width=2, tags="piece")
 
     def confirm_give_up(self):
-        res = messagebox.askyesno("Desistir", "Tem certeza que deseja desistir da partida?")
-        if res: self.send({"type": "give_up"})
+        if messagebox.askyesno("Desistir", "Deseja mesmo abandonar a partida?"):
+            self.network.send({"type": "give_up"})
+
+    def send_chat(self, e):
+        msg = self.chat_ent.get()
+        if msg:
+            self.network.send({"type": "chat", "user": f"Jogador {self.player_id}", "text": msg})
+            self.chat_ent.delete(0, tk.END)
+
+    def add_chat(self, data):
+        self.chat_area.config(state='normal')
+        cor = "purple" if data['user'] == "SISTEMA" else "black"
+        self.chat_area.insert(tk.END, f"{data['user']}: {data['text']}\n", data['user'])
+        self.chat_area.tag_config(data['user'], foreground=cor)
+        self.chat_area.config(state='disabled')
+        self.chat_area.see(tk.END)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    client = DaraClient(root)
+    DaraClient(root)
     root.mainloop()
