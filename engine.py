@@ -7,11 +7,18 @@ class DaraEngine:
         self.pieces_left = {1: 12, 2: 12}
 
     def get_state(self):
+        # Verifica se alguém perdeu (menos de 3 peças na fase de movimento)
+        winner = None
+        if self.phase != "PLACEMENT":
+            if self.pieces_left[1] < 3: winner = 2
+            elif self.pieces_left[2] < 3: winner = 1
+            
         return {
-            "board": self.board,
-            "turn": self.turn,
-            "phase": self.phase,
-            "pieces_left": self.pieces_left
+            "board": self.board, 
+            "turn": self.turn, 
+            "phase": self.phase, 
+            "pieces_left": self.pieces_left,
+            "winner": winner
         }
 
     def get_sequence_at(self, r, c, p_id):
