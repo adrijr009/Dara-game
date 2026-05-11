@@ -26,7 +26,7 @@ class DaraRemoteServer:
             return pid
         return 0 # Retorna 0 se a sala já estiver cheia
     
-    @Pyro5.api.oneway # NÃO bloqueia o cliente; o cliente envia a ação e volta a rodar a UI na hora
+    @Pyro5.api.oneway # cliente envia a ação e volta a rodar a UI na hora
     def execute_action(self, player_id, msg):
         """ Processa as jogadas ou desistência enviadas pelos clientes """
         
@@ -39,7 +39,7 @@ class DaraRemoteServer:
         # Tenta processar a jogada na Engine (retorna True se for um movimento válido)
         if self.game.process_action(player_id, msg):
             state = self.game.get_state()
-            # Se após a jogada alguém venceu (ex: adversário ficou com menos de 3 peças)
+            # Se após a jogada alguém venceu
             if state["winner"]:
                 self.finalizar_jogo(state["winner"], f"Fim de jogo! Jogador {state['winner']} venceu!")
             else:
@@ -82,7 +82,7 @@ class DaraRemoteServer:
                 print(f"[SERVIDOR] Erro ao atualizar Jogador {pid}: {e}")
 
     def start_game(self):
-        """ Orquestra o início da partida após os 2 jogadores conectarem """
+        """ Início da partida após os 2 jogadores conectarem """
         print("[SERVIDOR] Realizando sorteio de quem começa...")
         # Lógica de Sorteio Aleatório
         self.game.turn = random.choice([1, 2])

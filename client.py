@@ -10,16 +10,15 @@ import threading
 @Pyro5.api.expose
 class ClientCallback:
     """ 
-    Esta classe transforma o cliente em um "mini-servidor". 
-    O servidor principal chama estes métodos remotamente para atualizar o jogador.
+    Classe que permite o servidor principal 
+    chamar estes métodos remotamente para atualizar o jogador.
     """
     def __init__(self, ui):
         self.ui = ui # Referência para a classe principal da interface
 
     def update_ui(self, data):
         """ Recebe o novo estado do tabuleiro e turno do servidor """
-        # .after(0, ...) é vital no Tkinter: ele garante que a atualização da tela
-        # ocorra na thread principal, evitando que o programa trave ou feche.
+        #thread principal, evitando que o programa trave ou feche.
         self.ui.root.after(0, self.ui.draw_board, data)
 
     def trigger_start(self):
@@ -36,7 +35,6 @@ class ClientCallback:
 class RMIHandler:
     """ 
     Gerencia toda a lógica de saída (Cliente -> Servidor).
-    Abstrai a complexidade do Pyro5 para o resto do código.
     """
     def __init__(self, ui):
         self.ui = ui
@@ -74,7 +72,6 @@ class RMIHandler:
         """ Envia dados para o servidor sem travar a interface do usuário """
         def async_send():
             try:
-                # Criamos um Proxy novo para cada envio (melhor prática em sistemas distribuídos)
                 with Pyro5.api.Proxy(self.server_uri) as proxy:
                     if data['type'] == 'chat':
                         proxy.send_chat(data['user'], data['text'])
@@ -142,7 +139,6 @@ class DaraClient:
 
         for r in range(5):
             for c in range(6):
-                # Usamos Canvas para desenhar as peças circulares
                 canv = tk.Canvas(board_grid, width=50, height=50, bg="white", highlightthickness=1)
                 canv.grid(row=r, column=c, padx=1, pady=1)
                 # O clique envia a posição (linha, coluna) para processamento
@@ -185,7 +181,7 @@ class DaraClient:
         elif self.phase == "CAPTURE":
             self.network.send({"type": "capture", "pos": (r, c)})
         
-        self.refresh_visuals() # Atualiza o feedback visual imediato (ex: seleção amarela)
+        self.refresh_visuals() # Atualiza o feedback visual imediato
 
     def draw_board(self, data):
         """ Reconstrói o tabuleiro com base nos dados oficiais vindos do servidor """
